@@ -1,0 +1,296 @@
+using CopilotKeyRemapper.Classes;
+using CopilotKeyRemapper.Classes.Settings;
+using CopilotKeyRemapper.Helpers;
+using CopilotKeyRemapper.Models;
+using CopilotKeyRemapper.Services;
+using CopilotKeyRemapper.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
+
+namespace CopilotKeyRemapper.Pages;
+
+public sealed partial class ActionPage : Page
+{
+    private bool _loading;
+    private ShortcutRecorder? _recorder;
+    private string _comboBeforeRecording = "(not set)";
+
+    private List<InstalledApp> _allApps = new();
+    private bool _appsLoaded;
+
+    private CopilotActionData Action => SettingsManager.Current.Action;
+
+    public ActionPage()
+    {
+        InitializeComponent();
+        BuildFunctionList(null);
+        LoadFromAction();
+    }
+
+    // ── Mode selection (SelectorBar) ─────────────────────────────────
+
+    private void ModeBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (_loading) return;
+        var newType = (ModeBar.SelectedItem?.Tag as string) switch
+        {
+            "KeyCombo" => CopilotActionType.KeyCombo,
+            "LaunchApp" => CopilotActionType.LaunchApp,
+            "WindowsFunction" => CopilotActionType.WindowsFunction,
+            _ => CopilotActionType.None,
+        };
+        if (newType == Action.Type) return; // ignore spurious/programmatic re-selection
+        Action.Type = newType;              // the mode bar is the ONLY writer of Type
+        SettingsManager.SaveSettings();
+        ShowPanelFor(newType);
+    }
+
+    private void LoadFromAction()
+    {
+        _loading = true;
+        var a = Action;
+
+        SelectBarItem(ModeBar, a.Type switch
+        {
+            CopilotActionType.KeyCombo => "KeyCombo",
+            CopilotActionType.LaunchApp => "LaunchApp",
+            CopilotActionType.WindowsFunction => "WindowsFunction",
+            _ => "None",
+        });
+
+        ComboDisplay.Text = a.Combo is { IsEmpty: false } c ? c.ToString() : "(not set)";
+
+        // Launch box shows only custom (non-app) targets.
+        bool isApp = a.LaunchPath.StartsWith(@"shell:AppsFolder\", StringComparison.OrdinalIgnoreCase);
+        LaunchPathBox.Text = isApp ? "" : a.LaunchPath;
+        LaunchArgsBox.Text = a.LaunchArguments;
+
+        FunctionSearch.Text = "";
+        BuildFunctionList(null);
+        if (a.Type == CopilotActionType.WindowsFunction) SelectFunctionInList(a.WindowsFunctionId);
+
+        ShowPanelFor(a.Type);
+        _loading = false;
+
+        if (a.Type == CopilotActionType.LaunchApp) _ = EnsureAppsLoadedAsync();
+    }
+
+    private static void SelectBarItem(SelectorBar bar, string tag)
+    {
+        foreach (var item in bar.Items)
+            if (item.Tag as string == tag) { bar.SelectedItem = item; return; }
+    }
+
+    private void ShowPanelFor(CopilotActionType type)
+    {
+        var V = Microsoft.UI.Xaml.Visibility.Visible;
+        var C = Microsoft.UI.Xaml.Visibility.Collapsed;
+        ComboPanel.Visibility = type == CopilotActionType.KeyCombo ? V : C;
+        LaunchPanel.Visibility = type == CopilotActionType.LaunchApp ? V : C;
+        FunctionPanel.Visibility = type == CopilotActionType.WindowsFunction ? V : C;
+        NonePanel.Visibility = type == CopilotActionType.None ? V : C;
+
+        if (type == CopilotActionType.LaunchApp) _ = EnsureAppsLoadedAsync();
+    }
+
+    // ── App chooser ──────────────────────────────────────────────────
+
+    private async Task EnsureAppsLoadedAsync()
+    {
+        if (_appsLoaded) return;
+        _appsLoaded = true;
+        _allApps = await InstalledAppsService.GetAppsAsync();
+        FilterApps(AppSearch.Text);
+        InstalledAppsService.LoadIcons(_allApps, DispatcherQueue);
+        PreselectCurrentApp();
+    }
+
+    private void FilterApps(string? query)
+    {
+        IEnumerable<InstalledApp> items = _allApps;
+        if (!string.IsNullOrWhiteSpace(query))
+            items = items.Where(a => a.Name.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase));
+        AppList.ItemsSource = items.ToList();
+    }
+
+    private void PreselectCurrentApp()
+    {
+        if (Action.Type != CopilotActionType.LaunchApp) return;
+        var match = _allApps.FirstOrDefault(a =>
+            string.Equals(a.LaunchPath, Action.LaunchPath, StringComparison.OrdinalIgnoreCase));
+        if (match == null) return;
+        _loading = true;
+        if (AppList.ItemsSource is IEnumerable<InstalledApp> shown && shown.Contains(match))
+            AppList.SelectedItem = match;
+        _loading = false;
+    }
+
+    private void AppSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
+        FilterApps(sender.Text);
+    }
+
+    private void AppList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (AppList.SelectedItem is not InstalledApp app) return;
+        if (string.Equals(app.LaunchPath, Action.LaunchPath, StringComparison.OrdinalIgnoreCase)) return;
+        // Type is owned by the mode bar; this only sets the target.
+        Action.LaunchPath = app.LaunchPath;
+        Action.LaunchDisplayName = app.Name;
+        Action.LaunchArguments = "";
+        SettingsManager.SaveSettings();
+        _loading = true; LaunchPathBox.Text = ""; _loading = false; // the two inputs don't fight
+    }
+
+    // ── Custom shortcut capture (low-level hook, suppresses keys) ─────
+
+    private void RecordButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_recorder?.IsRecording == true) { _recorder.Stop(); EndRecordingUi(restore: true); return; }
+        _recorder ??= CreateRecorder();
+        _comboBeforeRecording = ComboDisplay.Text;
+        ComboDisplay.Text = "Press the shortcut…";
+        ComboBorder.BorderBrush = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+        ComboBorder.BorderThickness = new Thickness(2);
+        RecordButton.Content = "Recording… (Esc)";
+        RecordButton.Focus(FocusState.Programmatic);
+        _recorder.Start();
+    }
+
+    private ShortcutRecorder CreateRecorder()
+    {
+        var r = new ShortcutRecorder(DispatcherQueue);
+        r.ModifiersChanged += mods =>
+        {
+            if (_recorder?.IsRecording != true) return;
+            ComboDisplay.Text = mods == KeyMods.None ? "Press the shortcut…" : $"{new KeyCombo(mods, 0)} + …";
+        };
+        r.Captured += combo =>
+        {
+            Action.Combo = combo; // Type is owned by the mode bar (Shortcut)
+            SettingsManager.SaveSettings();
+            EndRecordingUi(restore: false);
+            ComboDisplay.Text = combo.ToString();
+        };
+        r.Cancelled += () => EndRecordingUi(restore: true);
+        return r;
+    }
+
+    private void EndRecordingUi(bool restore)
+    {
+        RecordButton.Content = "Record shortcut";
+        ComboBorder.BorderBrush = (Brush)Application.Current.Resources["ControlStrokeColorDefaultBrush"];
+        ComboBorder.BorderThickness = new Thickness(1);
+        if (restore) ComboDisplay.Text = _comboBeforeRecording;
+    }
+
+    private void RecordButton_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_recorder?.IsRecording == true) { _recorder.Stop(); EndRecordingUi(restore: true); }
+    }
+
+    private void ClearComboButton_Click(object sender, RoutedEventArgs e)
+    {
+        Action.Combo = new KeyCombo();
+        ComboDisplay.Text = "(not set)";
+        SettingsManager.SaveSettings();
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e) => _recorder?.Stop();
+
+    // ── Custom file / link ───────────────────────────────────────────
+
+    private void LaunchPathBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (string.IsNullOrEmpty(LaunchPathBox.Text)) return; // don't clobber an app selection
+        Action.LaunchPath = LaunchPathBox.Text;
+        Action.LaunchDisplayName = FriendlyTarget(LaunchPathBox.Text);
+        SettingsManager.SaveSettings();
+        _loading = true; AppList.SelectedItem = null; _loading = false; // typing a path clears app selection
+    }
+
+    private void LaunchArgsBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loading) return;
+        Action.LaunchArguments = LaunchArgsBox.Text;
+        SettingsManager.SaveSettings();
+    }
+
+    private void BrowseButton_Click(object sender, RoutedEventArgs e) => _ = BrowseAsync();
+
+    private async Task BrowseAsync()
+    {
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add("*");
+        var window = SettingsWindow.GetCurrent();
+        if (window == null) return;
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        var file = await picker.PickSingleFileAsync();
+        if (file == null) return;
+        LaunchPathBox.Text = file.Path; // triggers TextChanged → saves
+    }
+
+    private static string FriendlyTarget(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        if (path.Contains("://") || (path.Contains(':') && path.StartsWith("ms-"))) return path;
+        try { return Path.GetFileNameWithoutExtension(path); }
+        catch { return path; }
+    }
+
+    // ── Windows-function catalog ─────────────────────────────────────
+
+    private void BuildFunctionList(string? filter)
+    {
+        IEnumerable<WindowsFunction> items = WindowsFunctionCatalog.All;
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            string f = filter.Trim();
+            items = items.Where(x =>
+                x.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                x.Group.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                x.Description.Contains(f, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var groups = items.GroupBy(x => x.Group)
+            .Select(g => new Grouping<string, WindowsFunction>(g.Key, g)).ToList();
+        FunctionList.ItemsSource = new CollectionViewSource { IsSourceGrouped = true, Source = groups }.View;
+    }
+
+    private void FunctionSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
+        BuildFunctionList(sender.Text);
+    }
+
+    private void FunctionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (FunctionList.SelectedItem is not WindowsFunction fn) return;
+        if (fn.Id == Action.WindowsFunctionId) return;
+        Action.WindowsFunctionId = fn.Id; // Type is owned by the mode bar
+        SettingsManager.SaveSettings();
+    }
+
+    private void SelectFunctionInList(string id)
+    {
+        if (WindowsFunctionCatalog.TryGet(id) == null) return;
+        if (FunctionList.ItemsSource is Microsoft.UI.Xaml.Data.ICollectionView view)
+            foreach (var group in view)
+                if (group is IEnumerable<WindowsFunction> g)
+                    foreach (var item in g)
+                        if (item.Id == id) { FunctionList.SelectedItem = item; return; }
+    }
+}

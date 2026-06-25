@@ -1,0 +1,31 @@
+<Page
+    x:Class="CopilotKeyRemapper.Pages.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer Padding="32,16,32,32">
+        <StackPanel Spacing="16" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Text="About" Style="{StaticResource TitleTextBlockStyle}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <Image x:Name="AppIcon" Width="48" Height="48" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Copilot Key Remapper" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="VersionText" Opacity="0.7" />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock TextWrapping="Wrap" Opacity="0.9"
+                       Text="Copilot Key Remapper lets you choose what the dedicated Copilot key does on your keyboard — send a custom shortcut, open an app, or run a Windows function." />
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="How it works" FontWeight="SemiBold" />
+                    <TextBlock TextWrapping="Wrap" Opacity="0.85"
+                               Text="Copilot Key Remapper registers as an official Microsoft Copilot hardware-key provider. Once you choose it under Windows Settings → Customize Copilot key, pressing the key launches a tiny background handler that runs the action you configured — a custom shortcut, an app, or a Windows function — and exits. Nothing stays resident." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
