@@ -68,3 +68,9 @@ re-installs).
 - Windows 11 (build 22621+)
 - .NET 10 SDK; Windows SDK packaging tools to build the MSIX
 - Full Native AOT for the handler additionally needs the VC++ build tools (optional)
+
+## License
+
+Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free for any
+**personal and other noncommercial use**, including modifying and redistributing it.
+**Commercial use is not permitted.** Copyright © 2026 Ryan Ewen.
