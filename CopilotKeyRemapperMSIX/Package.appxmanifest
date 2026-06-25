@@ -84,6 +84,8 @@
   </Applications>
 
   <Capabilities>
+    <!-- Only used when the user clicks "Check for updates" in the About page. -->
+    <Capability Name="internetClient" />
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
