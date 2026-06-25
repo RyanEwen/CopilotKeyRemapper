@@ -7,18 +7,17 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap3 rescap">
 
-  <!-- Identity: replace Name/Publisher with your Partner Center values before Store
-       submission. The build script swaps Publisher to the dev cert subject for local
-       (sideload) builds. -->
+  <!-- Identity from Partner Center. The build script swaps Publisher to the dev cert
+       subject for local (sideload) dev builds; -NoSign keeps these real values for Store. -->
   <Identity
-    Name="YOURPUBLISHERID.CopilotKeyRemapper"
-    Publisher="CN=CopilotKeyRemapper-Dev"
+    Name="27766TechnicallyReal.CopilotKeyRemapper"
+    Publisher="CN=C21E6CEF-D0D1-4497-93F9-3718D054DA0E"
     Version="VERSION_PLACEHOLDER"
     ProcessorArchitecture="ARCH_PLACEHOLDER" />
 
   <Properties>
     <DisplayName>Copilot Key Remapper</DisplayName>
-    <PublisherDisplayName>CopilotKeyRemapper</PublisherDisplayName>
+    <PublisherDisplayName>TechnicallyReal</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
