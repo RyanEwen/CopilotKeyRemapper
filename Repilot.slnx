@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Repilot/Repilot.csproj" />
+  <Project Path="RepilotKey/RepilotKey.csproj">
+    <Platform Project="x64" />
+  </Project>
+</Solution>

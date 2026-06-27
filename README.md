@@ -1,4 +1,4 @@
-# Copilot Key Remapper
+# Repilot
 
 A Windows 11 app that lets you choose what your keyboard's dedicated **Copilot key**
 does, using the official Microsoft "Copilot hardware key provider" path — so it
@@ -15,13 +15,13 @@ it open. Idle footprint: zero.
 The keypress path is deliberately **thin and non-resident** — nothing runs in the
 background just to wait for the key:
 
-- **`CopilotKeyRemapperKey.exe`** — a tiny self-contained (ReadyToRun, trimmed, single-file)
+- **`RepilotKey.exe`** — a tiny self-contained (ReadyToRun, trimmed, single-file)
   native-ish exe. It is the registered Copilot-key provider. On a key press Windows
   launches it; it reads `settings.json`, performs the action (synthesized keystroke
   via `SendInput`, or `Process.Start` for an app/URI), and **exits**. No window, no
   resident process, ~ms startup. (One csproj flag from full Native AOT if the VC++
   build tools are present.)
-- **`CopilotKeyRemapper.exe`** — the WinUI 3 settings UI. Launched on demand from the Start
+- **`Repilot.exe`** — the WinUI 3 settings UI. Launched on demand from the Start
   tile to configure the actions. Never resident, never in the keypress path.
 
 Both ship in one MSIX. The handler is `Application Id="App"` (so the user's key
@@ -43,7 +43,7 @@ handler debounces — one press runs the action exactly once.) The action can be
 
 **Settings app (dev):**
 ```powershell
-dotnet build CopilotKeyRemapper/CopilotKeyRemapper.csproj -c Debug
+dotnet build Repilot/Repilot.csproj -c Debug
 ```
 
 **MSIX package (assignable / Store):**
@@ -51,14 +51,14 @@ dotnet build CopilotKeyRemapper/CopilotKeyRemapper.csproj -c Debug
 # Needs the Windows SDK packaging tools (makeappx/makepri/signtool). The build
 # script finds them in an installed SDK or the Microsoft.Windows.SDK.BuildTools
 # NuGet package (acquiring it if needed).
-powershell -File CopilotKeyRemapperMSIX/generate-msix-images.ps1   # one-time: visual assets
-powershell -File CopilotKeyRemapperMSIX/build-msix.ps1             # sideload (dev-signed)
-powershell -File CopilotKeyRemapperMSIX/build-msix.ps1 -NoSign     # Store upload
+powershell -File RepilotMSIX/generate-msix-images.ps1   # one-time: visual assets
+powershell -File RepilotMSIX/build-msix.ps1             # sideload (dev-signed)
+powershell -File RepilotMSIX/build-msix.ps1 -NoSign     # Store upload
 ```
 
 The script publishes both exes (WinUI self-contained + the handler) into the package.
 Before Store submission, set `<Identity>` `Name`/`Publisher` in
-`CopilotKeyRemapperMSIX/Package.appxmanifest` to your Partner Center values. Bump
+`RepilotMSIX/Package.appxmanifest` to your Partner Center values. Bump
 `<Version>` in `Directory.Build.props` for each update (MSIX blocks same-version
 re-installs).
 
@@ -66,8 +66,8 @@ re-installs).
 
 1. Install the signed MSIX (or from the Store).
 2. **Settings → Bluetooth & devices → Keyboard → Customize Copilot key → Custom →
-   Copilot Key Remapper.**
-3. Open **Copilot Key Remapper** from the Start menu to set the action.
+   Repilot.**
+3. Open **Repilot** from the Start menu to set the action.
 
 ## Requirements
 

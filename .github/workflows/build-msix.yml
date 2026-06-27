@@ -39,7 +39,7 @@ jobs:
       # ── Generate MSIX visual assets ────────────────────────────
       - name: Generate images
         shell: pwsh
-        run: ./CopilotKeyRemapperMSIX/generate-msix-images.ps1
+        run: ./RepilotMSIX/generate-msix-images.ps1
 
       # ── Build the MSIX package ─────────────────────────────────
       # Sign with a CA-trusted certificate when these repository secrets exist:
@@ -53,7 +53,7 @@ jobs:
           CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
           CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
         run: |
-          $script = "CopilotKeyRemapperMSIX/build-msix.ps1"
+          $script = "RepilotMSIX/build-msix.ps1"
           if (-not [string]::IsNullOrEmpty($env:CODESIGN_PFX_BASE64)) {
             $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
             [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MSIX-${{ matrix.platform }}
-          path: CopilotKeyRemapperMSIX/bin/msix-output/CopilotKeyRemapper-${{ matrix.platform }}.msix
+          path: RepilotMSIX/bin/msix-output/Repilot-${{ matrix.platform }}.msix
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

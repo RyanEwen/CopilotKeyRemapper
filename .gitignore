@@ -379,7 +379,7 @@ build_out.txt
 *.cer
 
 # MSIX build output
-CopilotKeyRemapperMSIX/bin/
+RepilotMSIX/bin/
 
 # Local Claude Code settings
 .claude/settings.local.json

@@ -1,6 +1,0 @@
-<Solution>
-  <Project Path="CopilotKeyRemapper/CopilotKeyRemapper.csproj" />
-  <Project Path="CopilotKeyRemapperKey/CopilotKeyRemapperKey.csproj">
-    <Platform Project="x64" />
-  </Project>
-</Solution>

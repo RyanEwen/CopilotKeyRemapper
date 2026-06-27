@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RepilotKey</RootNamespace>
+    <AssemblyName>RepilotKey</AssemblyName>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>..\Repilot\Resources\Repilot.ico</ApplicationIcon>
+
+    <!-- Tiny, fast, fire-and-exit handler with no resident footprint.
+         Self-contained + ReadyToRun + trimmed + single-file = a fast-starting
+         standalone exe that needs no installed .NET runtime and no C++ linker
+         (unlike full Native AOT). Flip to <PublishAot> if the VC++ build tools
+         are available for an even smaller/faster binary. -->
+    <SelfContained>true</SelfContained>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EventSourceSupport>false</EventSourceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
+  <!-- Share the action model + catalog + executor with the settings app (linked, not duplicated). -->
+  <ItemGroup>
+    <Compile Include="..\Repilot\Models\KeyCombo.cs" Link="Shared\KeyCombo.cs" />
+    <Compile Include="..\Repilot\Models\WindowsFunction.cs" Link="Shared\WindowsFunction.cs" />
+    <Compile Include="..\Repilot\Models\CopilotActionData.cs" Link="Shared\CopilotActionData.cs" />
+    <Compile Include="..\Repilot\Services\WindowsFunctionCatalog.cs" Link="Shared\WindowsFunctionCatalog.cs" />
+    <Compile Include="..\Repilot\Services\ActionExecutor.cs" Link="Shared\ActionExecutor.cs" />
+  </ItemGroup>
+</Project>
