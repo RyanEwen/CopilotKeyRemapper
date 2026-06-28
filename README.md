@@ -14,6 +14,14 @@
   </a>
 </p>
 
+<p align="center">
+  <img src="docs/1-keyboard-shortcut.png" alt="Map the Copilot key to a keyboard shortcut" width="250">
+  &nbsp;
+  <img src="docs/2-application.png" alt="Map the Copilot key to an app or link" width="250">
+  &nbsp;
+  <img src="docs/3-windows-function.png" alt="Map the Copilot key to a Windows function" width="250">
+</p>
+
 Repilot lets you choose what your keyboard's dedicated **Copilot key** (or **Windows logo key + C**) does, using the official Microsoft "Copilot hardware key provider" path — so it appears in **Settings → Bluetooth & devices → Keyboard → Customize Copilot key**.
 
 **No background service. No wasted resources.** Nothing runs while you wait for the
