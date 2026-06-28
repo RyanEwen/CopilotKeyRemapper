@@ -1,6 +1,51 @@
-# Generates Resources\Repilot.ico — a multi-resolution PNG-compressed ICO.
+# Generates Resources\Repilot.ico - a multi-resolution PNG-compressed ICO
+# (dark keycap + white "R", matching the MSIX tile art).
 # Run with Windows PowerShell (System.Drawing): powershell.exe -NoProfile -File generate-icon.ps1
 Add-Type -AssemblyName System.Drawing
+
+$tile  = [System.Drawing.Color]::FromArgb(255, 233, 240, 250)  # E9F0FA  light tile
+$face  = [System.Drawing.Color]::FromArgb(255, 45, 50, 59)     # 2D323B  keycap face
+$base  = [System.Drawing.Color]::FromArgb(255, 32, 36, 43)     # 20242B  keycap base
+$edge  = [System.Drawing.Color]::FromArgb(255, 58, 64, 73)     # 3A4049  keycap edge
+$white = [System.Drawing.Color]::White
+
+function Rounded($x, $y, $w, $h, $r) {
+    $d = [single]($r * 2)
+    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $p.AddArc([single]$x, [single]$y, $d, $d, 180, 90)
+    $p.AddArc([single]($x + $w - $d), [single]$y, $d, $d, 270, 90)
+    $p.AddArc([single]($x + $w - $d), [single]($y + $h - $d), $d, $d, 0, 90)
+    $p.AddArc([single]$x, [single]($y + $h - $d), $d, $d, 90, 90)
+    $p.CloseFigure()
+    return $p
+}
+
+function Draw-Key($g, $S, $ox, $oy) {
+    $kc  = [single]($S * 0.64)
+    $kx  = [single]($ox + ($S - $kc) / 2)
+    $ky  = [single]($oy + ($S - $kc) / 2 - $S * 0.015)
+    $r   = [single]($kc * 0.2)
+    $lip = [single]($kc * 0.075)
+
+    $bp = Rounded $kx ($ky + $lip) $kc $kc $r
+    $bb = New-Object System.Drawing.SolidBrush($base)
+    $g.FillPath($bb, $bp); $bb.Dispose(); $bp.Dispose()
+
+    $fp = Rounded $kx $ky $kc $kc $r
+    $fb = New-Object System.Drawing.SolidBrush($face)
+    $g.FillPath($fb, $fp); $fb.Dispose()
+    $pen = New-Object System.Drawing.Pen($edge, [single][Math]::Max(1.0, $kc * 0.02))
+    $g.DrawPath($pen, $fp); $pen.Dispose(); $fp.Dispose()
+
+    $font = New-Object System.Drawing.Font("Segoe UI", [single]($kc * 0.62), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $wb = New-Object System.Drawing.SolidBrush($white)
+    $fmt = New-Object System.Drawing.StringFormat
+    $fmt.Alignment = [System.Drawing.StringAlignment]::Center
+    $fmt.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $tr = New-Object System.Drawing.RectangleF($kx, [single]($ky - $kc * 0.04), $kc, $kc)
+    $g.DrawString("R", $font, $wb, $tr, $fmt)
+    $font.Dispose(); $wb.Dispose()
+}
 
 function New-Master([int]$size) {
     $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -10,34 +55,13 @@ function New-Master([int]$size) {
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # Rounded-rect background with a blue -> purple gradient
-    $pad = [int]($size * 0.06)
-    $rectSize = $size - 2 * $pad
-    $radius = [int]($size * 0.22)
-    $rect = New-Object System.Drawing.Rectangle($pad, $pad, $rectSize, $rectSize)
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $d = $radius * 2
-    $path.AddArc($rect.X, $rect.Y, $d, $d, 180, 90)
-    $path.AddArc($rect.Right - $d, $rect.Y, $d, $d, 270, 90)
-    $path.AddArc($rect.Right - $d, $rect.Bottom - $d, $d, $d, 0, 90)
-    $path.AddArc($rect.X, $rect.Bottom - $d, $d, $d, 90, 90)
-    $path.CloseFigure()
+    $pad = [single]($size * 0.04)
+    $sz = [single]($size - 2 * $pad)
+    $rp = Rounded $pad $pad $sz $sz ([single]($size * 0.22))
+    $bg = New-Object System.Drawing.SolidBrush($tile)
+    $g.FillPath($bg, $rp); $bg.Dispose(); $rp.Dispose()
 
-    $c1 = [System.Drawing.Color]::FromArgb(255, 38, 132, 255)   # blue
-    $c2 = [System.Drawing.Color]::FromArgb(255, 138, 79, 255)   # purple
-    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $c1, $c2, 55.0)
-    $g.FillPath($brush, $path)
-
-    # Keyboard glyph (Segoe Fluent Icons ) in white
-    $glyph = [char]0xE765
-    $font = New-Object System.Drawing.Font("Segoe Fluent Icons", [single]($size * 0.5), [System.Drawing.GraphicsUnit]::Pixel)
-    $white = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-    $fmt = New-Object System.Drawing.StringFormat([System.Drawing.StringFormat]::GenericTypographic)
-    $fmt.Alignment = [System.Drawing.StringAlignment]::Center
-    $fmt.LineAlignment = [System.Drawing.StringAlignment]::Center
-    $rectF = New-Object System.Drawing.RectangleF([single]$pad, [single]$pad, [single]$rectSize, [single]$rectSize)
-    $g.DrawString([string]$glyph, $font, $white, $rectF, $fmt)
-
+    Draw-Key $g $size 0 0
     $g.Dispose()
     return $bmp
 }
