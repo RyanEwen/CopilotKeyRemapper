@@ -1,8 +1,12 @@
-# Generates the MSIX visual assets (dark keycap + white "R") into Images\.
+# Generates the MSIX visual assets AND the app .ico from one source: a dark keycap
+# bearing a white "R", on a light rounded tile.
 # Run with Windows PowerShell: powershell.exe -NoProfile -File generate-msix-images.ps1
+# ASCII only (Windows PowerShell 5.1 reads BOM-less .ps1 as ANSI).
 Add-Type -AssemblyName System.Drawing
 
+$repoRoot  = Split-Path $PSScriptRoot -Parent
 $imagesDir = Join-Path $PSScriptRoot "Images"
+$icoPath   = Join-Path $repoRoot "Repilot\Resources\Repilot.ico"
 New-Item -ItemType Directory -Force $imagesDir | Out-Null
 
 $tile  = [System.Drawing.Color]::FromArgb(255, 233, 240, 250)  # E9F0FA  light tile
@@ -50,48 +54,105 @@ function Draw-Key($g, $S, $ox, $oy) {
     $font.Dispose(); $wb.Dispose()
 }
 
-# Full-bleed light tile with the centered keycap (tiles, logos).
-function New-Square([int]$size, [string]$path) {
-    $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+# Render the whole icon (rounded tile + keycap) at side M.
+function New-Master([int]$M) {
+    $bmp = New-Object System.Drawing.Bitmap($M, $M, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
     $g.Clear([System.Drawing.Color]::Transparent)
-    $bg = New-Object System.Drawing.SolidBrush($tile)
-    $g.FillRectangle($bg, 0, 0, $size, $size); $bg.Dispose()
-    Draw-Key $g $size 0 0
+    $tp = Rounded 0 0 $M $M ([single]($M * 0.18))
+    $tb = New-Object System.Drawing.SolidBrush($tile)
+    $g.FillPath($tb, $tp); $tb.Dispose(); $tp.Dispose()
+    Draw-Key $g $M 0 0
     $g.Dispose()
-    $bmp.Save((Join-Path $imagesDir $path), [System.Drawing.Imaging.ImageFormat]::Png)
-    $bmp.Dispose()
-    Write-Output "  $path ($size x $size)"
+    return $bmp
 }
 
-# Transparent splash with a centered rounded tile badge bearing the keycap.
-function New-Splash([int]$w, [int]$h, [string]$path) {
+function New-Resized($src, [int]$w, [int]$h) {
+    $bmp = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.Clear([System.Drawing.Color]::Transparent)
+    $g.DrawImage($src, 0, 0, $w, $h)
+    $g.Dispose()
+    return $bmp
+}
+
+# Render each asset at its OWN size with 4x supersampling (render large, shrink once).
+# Drawing tiny bitmaps directly aliases the keycap edges and the "R"; supersampling keeps
+# small frames (16/24/44 px) crisp.
+$SS = 4
+function New-Crisp([int]$size) {
+    $m = New-Master ($size * $SS)
+    $r = New-Resized $m $size $size
+    $m.Dispose()
+    return $r
+}
+
+function Save-Square([int]$size, [string]$name) {
+    $b = New-Crisp $size
+    $b.Save((Join-Path $imagesDir $name), [System.Drawing.Imaging.ImageFormat]::Png)
+    $b.Dispose()
+    Write-Output "  $name ($size x $size)"
+}
+
+function Save-Splash([int]$w, [int]$h, [string]$name) {
     $bmp = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
-    $badge = [int]($h * 0.6)
-    $bx = [int](($w - $badge) / 2); $by = [int](($h - $badge) / 2)
-    $rp = Rounded $bx $by $badge $badge ([single]($badge * 0.22))
-    $bg = New-Object System.Drawing.SolidBrush($tile)
-    $g.FillPath($bg, $rp); $bg.Dispose(); $rp.Dispose()
-    Draw-Key $g $badge $bx $by
-    $g.Dispose()
-    $bmp.Save((Join-Path $imagesDir $path), [System.Drawing.Imaging.ImageFormat]::Png)
+    $badge = [int]($h * 0.5); $bx = [int](($w - $badge) / 2); $by = [int](($h - $badge) / 2)
+    $bb = New-Crisp $badge
+    $g.DrawImage($bb, $bx, $by, $badge, $badge)
+    $bb.Dispose(); $g.Dispose()
+    $bmp.Save((Join-Path $imagesDir $name), [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
-    Write-Output "  $path ($w x $h)"
+    Write-Output "  $name ($w x $h)"
+}
+
+function Save-Ico([int[]]$sizes, [string]$path) {
+    $blobs = @()
+    foreach ($s in $sizes) {
+        $b = New-Crisp $s
+        $ms = New-Object System.IO.MemoryStream
+        $b.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+        $blobs += , ($ms.ToArray())
+        $ms.Dispose(); $b.Dispose()
+    }
+    $fs = [System.IO.File]::Create($path)
+    $bw = New-Object System.IO.BinaryWriter($fs)
+    $bw.Write([uint16]0); $bw.Write([uint16]1); $bw.Write([uint16]$sizes.Count)
+    $offset = 6 + 16 * $sizes.Count
+    for ($i = 0; $i -lt $sizes.Count; $i++) {
+        $s = $sizes[$i]; $len = $blobs[$i].Length
+        $wb = if ($s -ge 256) { 0 } else { $s }
+        $bw.Write([byte]$wb); $bw.Write([byte]$wb); $bw.Write([byte]0); $bw.Write([byte]0)
+        $bw.Write([uint16]1); $bw.Write([uint16]32)
+        $bw.Write([uint32]$len); $bw.Write([uint32]$offset)
+        $offset += $len
+    }
+    foreach ($b in $blobs) { $bw.Write($b) }
+    $bw.Flush(); $bw.Close(); $fs.Close()
+    Write-Output "  Repilot.ico ($($sizes -join ', '))"
 }
 
 Write-Output "Generating MSIX images:"
-New-Square 50  "StoreLogo.png"
-New-Square 44  "Square44x44Logo.png"
-New-Square 88  "Square44x44Logo.scale-200.png"
-New-Square 24  "Square44x44Logo.targetsize-24_altform-unplated.png"
-New-Square 150 "Square150x150Logo.png"
-New-Square 300 "Square150x150Logo.scale-200.png"
-New-Splash 620 300  "SplashScreen.png"
-New-Splash 1240 600 "SplashScreen.scale-200.png"
+Save-Square 50  "StoreLogo.png"
+Save-Square 44  "Square44x44Logo.png"
+Save-Square 88  "Square44x44Logo.scale-200.png"
+Save-Square 24  "Square44x44Logo.targetsize-24_altform-unplated.png"
+Save-Square 150 "Square150x150Logo.png"
+Save-Square 300 "Square150x150Logo.scale-200.png"
+Save-Splash 620 300  "SplashScreen.png"
+Save-Splash 1240 600 "SplashScreen.scale-200.png"
+
+Write-Output "Generating app icon:"
+Save-Ico @(16, 20, 24, 32, 40, 48, 64, 128, 256) $icoPath
+
 Write-Output "Done."
