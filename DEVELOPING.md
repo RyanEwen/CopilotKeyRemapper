@@ -63,3 +63,36 @@ Before Store submission, set `<Identity>` `Name`/`Publisher` in
 - .NET 10 SDK
 - Windows SDK packaging tools to build the MSIX
 - Full Native AOT for the handler additionally needs the VC++ build tools (optional)
+
+## Publishing to the Microsoft Store (CI)
+
+The [`Publish to Microsoft Store`](.github/workflows/store-publish.yml) workflow builds
+the unsigned x64 + ARM64 packages, bundles them into `Repilot.msixupload`, and submits a
+new Store submission via the [Microsoft Store Developer CLI](https://learn.microsoft.com/windows/apps/publish/msstore-dev-cli/overview)
+whenever a `v*` tag is pushed (or via **Run workflow**).
+
+**One-time setup** — add these repository secrets under
+*Settings → Secrets and variables → Actions*:
+
+| Secret | Where to get it |
+|---|---|
+| `STORE_TENANT_ID` | Entra (Azure AD) tenant ID of the app linked to Partner Center |
+| `STORE_CLIENT_ID` | Client (application) ID of that Entra app |
+| `STORE_CLIENT_SECRET` | A client secret you create for that Entra app |
+| `STORE_SELLER_ID` | Partner Center → *Account settings* → Seller ID |
+
+To create the linked app: Partner Center → **Account settings → User management →
+Azure AD applications → Add Azure AD application**. Create (or link) an app and give it
+the **Manager** role, then add a **client secret** to it in Entra. The Store product ID
+(`9PB5FJ08PNVJ`) is public and is hardcoded in the workflow.
+
+**Releasing:** bump `<Version>` in `Directory.Build.props` (the Store rejects a
+submission whose package version is not higher than the live one), commit, then:
+
+```powershell
+git tag v1.0.15
+git push origin v1.0.15
+```
+
+The workflow builds, bundles, and commits a submission for certification. Track its
+progress in Partner Center; it goes live automatically once it passes.

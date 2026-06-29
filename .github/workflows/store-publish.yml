@@ -1,0 +1,92 @@
+name: Publish to Microsoft Store
+
+# Builds the unsigned Store packages (x64 + ARM64) and submits a new Microsoft
+# Store submission via the Microsoft Store Developer CLI (msstore). Runs on every
+# version tag (and on demand).
+#
+# One-time setup -- add these repository secrets
+# (Settings -> Secrets and variables -> Actions -> New repository secret):
+#
+#   STORE_TENANT_ID      Entra (Azure AD) tenant ID of the app linked in Partner Center
+#   STORE_CLIENT_ID      Client (application) ID of that Entra app
+#   STORE_CLIENT_SECRET  A client secret created for that Entra app
+#   STORE_SELLER_ID      Partner Center Seller ID (Account settings)
+#
+# See DEVELOPING.md for how to obtain these. The Store product ID (9PB5FJ08PNVJ)
+# is public, so it is hardcoded below.
+#
+# IMPORTANT: bump <Version> in Directory.Build.props before tagging -- the Store
+# rejects a submission whose package version is not higher than the live one.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  store-publish:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Store credentials are configured
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrEmpty("${{ secrets.STORE_CLIENT_ID }}")) {
+            Write-Error "Store credentials are not set. Add the STORE_* repository secrets (see DEVELOPING.md)."
+            exit 1
+          }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate images
+        shell: pwsh
+        run: ./RepilotMSIX/generate-msix-images.ps1
+
+      - name: Build Store packages (unsigned, real identity)
+        shell: pwsh
+        run: |
+          ./RepilotMSIX/build-msix.ps1 -Platform x64 -NoSign
+          if ($LASTEXITCODE -ne 0) { Write-Error "x64 build failed"; exit 1 }
+          ./RepilotMSIX/build-msix.ps1 -Platform ARM64 -NoSign
+          if ($LASTEXITCODE -ne 0) { Write-Error "ARM64 build failed"; exit 1 }
+
+      - name: Bundle .msixupload
+        shell: pwsh
+        run: |
+          $out = "RepilotMSIX/bin/msix-output"
+          $x64 = Join-Path $out "Repilot-x64.msix"
+          $arm = Join-Path $out "Repilot-ARM64.msix"
+          foreach ($f in @($x64, $arm)) {
+            if (-not (Test-Path $f)) { Write-Error "missing package: $f"; exit 1 }
+          }
+          $zip = Join-Path $out "Repilot.zip"
+          $upload = Join-Path $out "Repilot.msixupload"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          if (Test-Path $upload) { Remove-Item $upload -Force }
+          Compress-Archive -Path $x64, $arm -DestinationPath $zip -Force
+          Move-Item $zip $upload -Force
+          Write-Host "Created $upload"
+
+      - name: Setup Microsoft Store CLI
+        uses: microsoft/setup-msstore-cli@v1
+
+      - name: Configure credentials
+        shell: pwsh
+        run: |
+          msstore reconfigure `
+            --tenantId "${{ secrets.STORE_TENANT_ID }}" `
+            --clientId "${{ secrets.STORE_CLIENT_ID }}" `
+            --clientSecret "${{ secrets.STORE_CLIENT_SECRET }}" `
+            --sellerId "${{ secrets.STORE_SELLER_ID }}"
+
+      - name: Submit to the Microsoft Store
+        shell: pwsh
+        run: |
+          msstore publish "RepilotMSIX/bin/msix-output/Repilot.msixupload" -id 9PB5FJ08PNVJ
+          if ($LASTEXITCODE -ne 0) { Write-Error "msstore publish failed"; exit 1 }
